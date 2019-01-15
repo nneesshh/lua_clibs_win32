@@ -40,5 +40,3 @@
 *.db
 *.opendb
 *\.vs/
-
-data/redis-unstable/
