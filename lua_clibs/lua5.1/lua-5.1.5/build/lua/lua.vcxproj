@@ -47,11 +47,13 @@
     <OutDir>$(ProjectDir)..\..\..\bin\$(Configuration)\</OutDir>
     <TargetName>lua</TargetName>
     <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(ProjectName).dir/$(Configuration)/</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(ProjectDir)..\..\..\bin\$(Configuration)\</OutDir>
     <TargetName>lua</TargetName>
     <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(ProjectName).dir/$(Configuration)/</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

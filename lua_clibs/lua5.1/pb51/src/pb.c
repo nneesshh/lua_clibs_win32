@@ -28,6 +28,38 @@
 
 #include <sys/types.h> /* This will likely define BYTE_ORDER */
 
+#if !defined(LUA_VERSION_NUM) || LUA_VERSION_NUM < 502
+
+#define lua_getuservalue     lua_getfenv
+#define lua_setuservalue     lua_setfenv
+
+#define lua_rawlen           lua_objlen
+
+#define luaL_setfuncs(L,f,n) luaL_register(L,NULL,f)
+#define luaL_newlib(L,f)     luaL_register(L,"_G",f)
+
+/* Compatibility for Lua 5.1 and older LuaJIT.
+ *
+ * compat_luaL_setfuncs() is used to create a module table where the functions
+ * have upvalues. Code borrowed from Lua 5.2 source's luaL_setfuncs().
+ */
+static void compat_luaL_setfuncs(lua_State *L, const luaL_Reg *reg, int nup)
+{
+	int i;
+
+	luaL_checkstack(L, nup, "too many upvalues");
+	for (; reg->name != NULL; reg++) {  /* fill the table with given functions */
+		for (i = 0; i < nup; i++)  /* copy upvalues to the top */
+			lua_pushvalue(L, -nup);
+		lua_pushcclosure(L, reg->func, nup);  /* closure with those upvalues */
+		lua_setfield(L, -(nup + 2), reg->name);
+	}
+	lua_pop(L, nup);  /* remove upvalues */
+	}
+#else
+#define compat_luaL_setfuncs(L, reg, nup) luaL_setfuncs(L, reg, nup)
+#endif
+
 #ifndef BYTE_ORDER
 #if (BSD >= 199103)
 # include <machine/endian.h>
@@ -321,7 +353,11 @@ static int zig_zag_encode64(lua_State *L) {
 
 	int64_t n = (int64_t)luaL_checknumber(L, 1);
 	uint64_t value = (n << 1) ^ (n >> 63);
+#if LUA_VERSION_NUM < 502
+	lua_pushnumber(L, value);
+#else
 	lua_pushinteger(L, value);
+#endif
 	return 1;
 }
 
@@ -329,7 +365,11 @@ static int zig_zag_decode64(lua_State *L) {
 
 	uint64_t n = (uint64_t)luaL_checknumber(L, 1);
 	int64_t value = (n >> 1) ^ -(int64_t)(n & 1);
+#if LUA_VERSION_NUM < 502
+	lua_pushnumber(L, value);
+#else
 	lua_pushinteger(L, value);
+#endif
 	return 1;
 }
 
@@ -429,7 +469,7 @@ static int struct_unpack(lua_State *L) {
 	return 1;
 }
 
-static int iostring_new(lua_State* L) {
+static int new_iostring(lua_State* L) {
 
 	IOString* io = (IOString*)lua_newuserdata(L, sizeof(IOString));
 	io->size = 0;
@@ -498,7 +538,7 @@ static const struct luaL_Reg _pb[] = {
 	{ "zig_zag_encode32", zig_zag_encode32 },
 	{ "zig_zag_decode64", zig_zag_decode64 },
 	{ "zig_zag_encode64", zig_zag_encode64 },
-	{ "new_iostring", iostring_new },
+	{ "new_iostring", new_iostring },
 	{ NULL, NULL }
 };
 
@@ -511,23 +551,19 @@ static const struct luaL_Reg _c_iostring_m[] = {
 	{ NULL, NULL }
 };
 
-LUALIB_API int
-luaopen_pb(lua_State *L) {
+LUALIB_API int luaopen_pb(lua_State *L);
+int luaopen_pb(lua_State *L) {
 
 	int top = lua_gettop(L);
 
 	luaL_newmetatable(L, IOSTRING_META);
 	lua_pushvalue(L, -1);
 	lua_setfield(L, -2, "__index");
-#if LUA_VERSION_NUM < 502
-	luaL_register(L, NULL, _c_iostring_m);
-	lua_pop(L, 1);
-	luaL_register(L, "pb", _pb);
-#else 
-	luaL_setfuncs(L, _c_iostring_m, 0);
-	lua_pop(L, 1);
-	luaL_newlib(L, _pb);
-#endif
+	compat_luaL_setfuncs(L, _c_iostring_m, 0);
+	lua_pop(L, 1);  /* pop IOSTRING_META */
+
+	lua_newtable(L);
+	compat_luaL_setfuncs(L, _pb, 0);
 
 	assert(1 == lua_gettop(L) - top);
 	return 1;
